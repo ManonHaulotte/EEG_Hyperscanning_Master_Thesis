@@ -57,7 +57,12 @@ def extract_baseline_periods(raw: mne.io.Raw, dyad: str, participant: str, outpu
     """Extract and save baseline rest and gaze periods."""
     logger.info(f"Extracting baseline periods for {dyad}{participant}...")
 
-    baseline_types = ["baseline_rest", "baseline_gaze"]
+    # Skip baseline rest for dyad 2
+    if dyad == '02':
+        baseline_types = ["baseline_gaze"]
+    else:
+        baseline_types = ["baseline_rest", "baseline_gaze"]
+
     onsets = raw.annotations.onset
     descriptions = raw.annotations.description
 
@@ -66,27 +71,37 @@ def extract_baseline_periods(raw: mne.io.Raw, dyad: str, participant: str, outpu
         stop_key = f"stop_{btype}"
 
         try:
-            start_time = next(onsets[i] for i, desc in enumerate(descriptions) if desc == start_key)
-            stop_time = next(onsets[i] for i, desc in enumerate(descriptions) if desc == stop_key)
+            start_indices = [i for i, desc in enumerate(descriptions) if desc == start_key]
+            stop_indices = [i for i, desc in enumerate(descriptions) if desc == stop_key]
+
+            if len(start_indices) != len(stop_indices):
+                logger.warning(f"Mismatched number of {start_key} and {stop_key} for {dyad}{participant}. Skipping.")
+                continue
+
+            for idx, (start_idx, stop_idx) in enumerate(zip(start_indices, stop_indices)):
+                start_time = onsets[start_idx] - raw.annotations.onset[0]
+                stop_time = onsets[stop_idx] - raw.annotations.onset[0]
+                duration = stop_time - start_time
+
+                if duration <= 0:
+                    logger.warning(f"Invalid {btype} duration #{idx+1} for {dyad}{participant}. Skipping.")
+                    continue
+
+                try:
+                    segment = raw.copy().crop(tmin=start_time, tmax=stop_time)
+                    output_file = os.path.join(output_dir, f"{dyad}{participant}_{btype}_{idx+1}.fif")
+                    segment.save(output_file, overwrite=True)
+                    logger.info(f"Saved {btype} baseline #{idx+1} to {output_file}")
+                except Exception as e:
+                    logger.exception(f"Error saving {btype} segment #{idx+1}: {e}")
+
+                
         except StopIteration:
             logger.warning(f"{start_key} or {stop_key} not found. Skipping {btype} for {dyad}{participant}.")
             continue
         except Exception as e:
             logger.exception(f"Error finding baseline markers for {btype}: {e}")
             continue
-
-        duration = stop_time - start_time
-        if duration <= 0:
-            logger.warning(f"Invalid {btype} duration for {dyad}{participant}. Skipping.")
-            continue
-
-        try:
-            segment = raw.copy().crop(tmin=start_time, tmax=stop_time)
-            output_file = os.path.join(output_dir, f"{dyad}{participant}_{btype}.fif")
-            segment.save(output_file, overwrite=True)
-            logger.info(f"Saved {btype} baseline to {output_file}")
-        except Exception as e:
-            logger.exception(f"Error saving {btype} segment: {e}")
 
 
 def segment_and_save(input_dir: str, output_dir: str, dyad: str, participant: str) -> None:
@@ -210,7 +225,9 @@ def plot_sample_segments(output_dir: str, dyad: str, participant: str):
         except Exception as e:
             logger.warning(f"Failed to plot segment for '{name_contains}': {e}")
 
-    try_plot("baseline_rest")
-    try_plot("baseline_gaze")
+    try_plot("baseline_rest_1")
+    try_plot("baseline_gaze_1")
+    try_plot("baseline_rest_2")
+    try_plot("baseline_gaze_2")
     try_plot("gesture")
     try_plot("verbal")
