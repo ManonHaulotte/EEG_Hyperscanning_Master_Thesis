@@ -5,3 +5,7 @@ Make sure you have Python 3.8+ and `pip` installed. Then run:
 
 ```bash
 pip install -r requirements.txt
+```
+### Credits
+Make sure to credit Manon Haulotte if you reuse this code. 
+Contact me at manonhaulotte@outlook.com for any questions.
